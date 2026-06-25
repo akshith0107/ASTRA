@@ -1,0 +1,24 @@
+# Backend
+backend/venv/
+backend/.venv/
+backend/chroma_db/
+backend/*.db
+backend/*.sqlite3
+backend/.env
+backend/app/models/bert/*.pkl
+backend/app/models/bert/*.pt
+backend/app/models/bert/*.pth
+backend/__pycache__/
+backend/**/*.pyc
+
+# Frontend (extra safety)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
