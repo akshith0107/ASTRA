@@ -84,6 +84,10 @@ def create_app() -> FastAPI:
     app.include_router(audio.router, prefix=settings.API_V1_STR, tags=["Audio Intelligence"])
     app.include_router(dashboard.router, prefix=settings.API_V1_STR, tags=["Dashboard"])
     app.include_router(network.router, prefix=settings.API_V1_STR, tags=["Network Intelligence"])
+    
+    from app.api import rag
+    app.include_router(rag.router, prefix=settings.API_V1_STR, tags=["RAG Pipeline"])
+    
     app.include_router(live_monitor.router, tags=["Live Monitor WebSockets"])
     from app.api import auth
     app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])

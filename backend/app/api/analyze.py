@@ -88,10 +88,20 @@ async def analyze_text(
     try:
         bert_service = request.app.state.bert_service
         rag_service = request.app.state.rag_service
+        lstm_service = request.app.state.lstm_service
         
         scam_type, confidence = await bert_service.classify(body.text)
         indicators = indicator_service.extract_indicators(body.text)
-        campaign_name, similarity_score, rag_scam_type = rag_service.retrieve_similar_scams(body.text)
+        top_docs = rag_service.retrieve_with_metadata(body.text, top_k=1)
+        
+        lstm_risk_score, lstm_risk_level, lstm_confidence = lstm_service.predict_risk(body.text)
+        
+        campaign_name, similarity_score, rag_scam_type = None, 0.0, None
+        if top_docs:
+            best_match = top_docs[0]
+            campaign_name = best_match.get("campaign")
+            similarity_score = best_match.get("similarity", 0.0)
+            rag_scam_type = best_match.get("category")
         
         risk_score, risk_level = risk_engine.calculate_risk(
             base_confidence=confidence if scam_type != "Legitimate" else 0.0,
@@ -120,7 +130,10 @@ async def analyze_text(
             confidence=max(confidence, similarity_score),
             indicators=indicators,
             transcript=body.text,
-            similar_scams=similar_scams
+            similar_scams=similar_scams,
+            lstm_risk_score=lstm_risk_score,
+            lstm_risk_level=lstm_risk_level,
+            lstm_confidence=lstm_confidence
         )
         
         # Step 4: Save to Database

@@ -23,3 +23,6 @@ class AnalyzeResponse(BaseModel):
     transcript: Optional[str] = Field(None, description="Transcribed text if audio was provided")
     language: Optional[str] = Field(None, description="Detected language of audio")
     similar_scams: List[SimilarScam] = Field(default_factory=list, description="Similar scams found in ChromaDB")
+    lstm_risk_score: Optional[float] = Field(None, description="Sequential risk score from BiLSTM")
+    lstm_risk_level: Optional[str] = Field(None, description="Sequential risk level from BiLSTM")
+    lstm_confidence: Optional[float] = Field(None, description="Sequential confidence from BiLSTM")

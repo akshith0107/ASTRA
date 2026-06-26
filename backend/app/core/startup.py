@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from app.services.whisper_service import whisper_service
 from app.services.bert_service import bert_service
 from app.services.rag_service import rag_service
+from app.services.lstm_service import lstm_service
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,13 @@ async def lifespan(app: FastAPI):
         whisper_service.load_model()
         app.state.whisper_service = whisper_service
         
-        # Load ChromaDB RAG Engine
-        rag_service.initialize_chroma()
+        # Load RAG Engine (index.pkl, pipeline.py, ChromaDB)
+        rag_service.initialize()
         app.state.rag_service = rag_service
+        
+        # Load BiLSTM Engine
+        lstm_service.initialize()
+        app.state.lstm_service = lstm_service
         
         logger.info("All ML Models loaded successfully into app.state")
     except Exception as e:
@@ -36,3 +41,4 @@ async def lifespan(app: FastAPI):
     app.state.bert_service = None
     app.state.whisper_service = None
     app.state.rag_service = None
+    app.state.lstm_service = None

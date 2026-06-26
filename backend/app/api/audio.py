@@ -107,6 +107,7 @@ async def analyze_audio(
         whisper_service = request.app.state.whisper_service
         bert_service = request.app.state.bert_service
         rag_service = request.app.state.rag_service
+        lstm_service = request.app.state.lstm_service
         
         # Step 1: Whisper Transcription and Language Detection
         transcript = await whisper_service.transcribe(audio_data)
@@ -119,7 +120,17 @@ async def analyze_audio(
         indicators = indicator_service.extract_indicators(transcript)
         
         # Step 4: RAG Threat Intelligence Search
-        campaign_name, similarity_score, rag_scam_type = rag_service.retrieve_similar_scams(transcript)
+        top_docs = rag_service.retrieve_with_metadata(transcript, top_k=1)
+        
+        # Step 4.5: LSTM Sequential Risk Estimation
+        lstm_risk_score, lstm_risk_level, lstm_confidence = lstm_service.predict_risk(transcript)
+        
+        campaign_name, similarity_score, rag_scam_type = None, 0.0, None
+        if top_docs:
+            best_match = top_docs[0]
+            campaign_name = best_match.get("campaign")
+            similarity_score = best_match.get("similarity", 0.0)
+            rag_scam_type = best_match.get("category")
         
         # Step 5: Calculate Risk Score
         risk_score, risk_level = risk_engine.calculate_risk(
@@ -152,7 +163,10 @@ async def analyze_audio(
             indicators=indicators,
             transcript=transcript,
             language=language,
-            similar_scams=similar_scams
+            similar_scams=similar_scams,
+            lstm_risk_score=lstm_risk_score,
+            lstm_risk_level=lstm_risk_level,
+            lstm_confidence=lstm_confidence
         )
         
         # Step 6: Database Storage via Repository

@@ -1,90 +1,104 @@
 import logging
 from typing import List, Dict, Any, Tuple
-import chromadb
-from chromadb.config import Settings
-# Stub out SentenceTransformers for testing if not fully loaded yet
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:
-    SentenceTransformer = None
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-class RAGService:
+class RagService:
     def __init__(self):
-        # Initialize ChromaDB local client
-        self.chroma_client = chromadb.Client(Settings(is_persistent=True, persist_directory="./chroma_db"))
-        
-        # Load SentenceTransformer model
-        if SentenceTransformer:
-            logger.info("Loading SentenceTransformer model for embeddings...")
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        else:
-            logger.warning("SentenceTransformer not found. Using stub embeddings.")
-            self.model = None
+        self.is_loaded = False
+        self.index = None
 
-        # Get or create the collection for scam knowledge base
-        self.collection = self.chroma_client.get_or_create_collection(name="scam_knowledge_base")
-
-    def create_embeddings(self, text: str) -> List[float]:
+    def initialize(self):
         """
-        Creates vector embeddings for the given text.
+        Loads the existing RAG pipeline components (FAISS TF-IDF index).
         """
-        if self.model:
-            return self.model.encode(text).tolist()
-        else:
-            # Return dummy embedding if model isn't available
-            return [0.0] * 384
-
-    def add_document(self, doc_id: str, text: str, campaign_name: str, scam_type: str):
-        """
-        Adds a new scam script/report to the ChromaDB collection.
-        """
-        embedding = self.create_embeddings(text)
-        
-        self.collection.add(
-            embeddings=[embedding],
-            documents=[text],
-            metadatas=[{"campaign_name": campaign_name, "scam_type": scam_type}],
-            ids=[doc_id]
-        )
-        logger.info(f"Added document {doc_id} to scam_knowledge_base")
-
-    def similarity_search(self, text: str, n_results: int = 1) -> Dict[str, Any]:
-        """
-        Searches the ChromaDB collection for similar text.
-        """
-        embedding = self.create_embeddings(text)
-        
-        if self.collection.count() == 0:
-            return {"distances": [[]], "metadatas": [[]], "documents": [[]]}
-
-        results = self.collection.query(
-            query_embeddings=[embedding],
-            n_results=min(n_results, self.collection.count())
-        )
-        return results
-
-    def retrieve_similar_scams(self, text: str, threshold_distance: float = 1.0) -> Tuple[str, float, str]:
-        """
-        Retrieves the most similar scam campaign and returns its details.
-        Returns: campaign_name, similarity_score, scam_type
-        """
-        results = self.similarity_search(text, n_results=1)
-        
-        if not results['distances'][0]:
-            return None, 0.0, None
-
-        distance = results['distances'][0][0]
-        # Invert distance to get a similarity score (closer to 0 distance = 1.0 similarity)
-        # Using a simple conversion for L2 distance (or cosine distance depending on chroma setup)
-        similarity_score = max(0.0, 1.0 - (distance / 2.0))
-        
-        if similarity_score < 0.5: # Example threshold
-            return None, similarity_score, None
+        logger.info("Initializing RAG Service...")
+        try:
+            import sys
+            import os
+            from pathlib import Path
             
-        metadata = results['metadatas'][0][0]
-        
-        return metadata.get('campaign_name'), similarity_score, metadata.get('scam_type')
+            # Prevent pipeline.py print statements (like '✓') from crashing Windows consoles
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8')
+            
+            rag_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'rag'))
+            sys.path.append(rag_dir)
+            
+            from app.rag.pipeline import SentinelXIndex
+            
+            # The pipeline.py load() expects a Path object pointing to the directory containing index.pkl
+            self.index = SentinelXIndex.load(Path(rag_dir))
+            self.is_loaded = True
+            logger.info("RAG Pipeline loaded successfully.")
+            
+        except ImportError as e:
+            logger.error(f"RAG Pipeline files missing or ImportError: {e}")
+            self.is_loaded = False
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG Pipeline: {e}")
+            self.is_loaded = False
 
-rag_service = RAGService()
+    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Retrieves top_k documents for a given query using the raw retrieve function.
+        """
+        if not self.is_loaded or self.index is None:
+            logger.warning("RAG Service not loaded. Returning empty retrieval.")
+            return []
+            
+        try:
+            from app.rag.pipeline import retrieve as pipeline_retrieve
+            return pipeline_retrieve(self.index, query, k=top_k)
+        except Exception as e:
+            logger.error(f"RAG Retrieval failed for query '{query}': {e}")
+            return []
+
+    def retrieve_with_metadata(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Retrieves top_k documents along with fully structured metadata directly from the index.
+        """
+        if not self.is_loaded or self.index is None:
+            logger.warning("RAG Service not loaded. Returning empty retrieval.")
+            return []
+            
+        try:
+            # index.search returns [(doc, sim), ...]
+            raw_results = self.index.search(query, k=top_k)
+            
+            normalized_results = []
+            for doc, sim in raw_results:
+                normalized = {
+                    "document": doc.text,
+                    "similarity": sim,
+                    "metadata": doc.metadata,
+                    "source": doc.metadata.get("source", "Unknown"),
+                    "category": doc.metadata.get("category", "General"),
+                    "language": doc.metadata.get("language", "en"),
+                    "campaign": doc.metadata.get("conv_id", "None") # conv_id is the campaign equivalent
+                }
+                normalized_results.append(normalized)
+                
+            return normalized_results
+        except Exception as e:
+            logger.error(f"RAG Metadata Retrieval failed for query '{query}': {e}")
+            return []
+
+    def score_risk(self, query: str) -> Tuple[float, str, str]:
+        """
+        Scores risk based on the pipeline's heuristics.
+        Returns: risk_score, verdict, matched_category
+        """
+        if not self.is_loaded or self.index is None:
+            return 0.0, "UNKNOWN", "unknown"
+            
+        try:
+            from app.rag.pipeline import score_risk as pipeline_score_risk
+            res = pipeline_score_risk(self.index, query)
+            return res.get("risk_score", 0.0), res.get("verdict", "UNKNOWN"), res.get("matched_category", "unknown")
+        except Exception as e:
+            logger.error(f"RAG risk scoring failed for query '{query}': {e}")
+            return 0.0, "UNKNOWN", "unknown"
+
+rag_service = RagService()
