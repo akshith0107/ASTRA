@@ -34,7 +34,7 @@ export default function Login() {
         body: formData.toString()
       });
       
-      await login(response.access_token);
+      await login(response.access_token, response.refresh_token);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -68,7 +68,7 @@ export default function Login() {
           <div className="relative z-10 flex flex-col h-full justify-between">
             <div className="flex items-center gap-3">
               <Shield className="w-8 h-8 text-primary" />
-              <h1 className="font-headline-lg text-headline-lg font-bold tracking-tighter uppercase text-primary">SentinelX</h1>
+              <h1 className="font-headline-lg text-headline-lg font-bold tracking-tighter uppercase text-primary">ASTRA</h1>
             </div>
             
             <div className="flex flex-col gap-stack-md max-w-lg mb-20">
@@ -95,7 +95,7 @@ export default function Login() {
           
           <div className="absolute top-edge-margin-mobile left-edge-margin-mobile lg:hidden flex items-center gap-2">
             <Shield className="w-6 h-6 text-primary" />
-            <span className="font-label-caps text-label-caps font-bold tracking-wider uppercase">SentinelX</span>
+            <span className="font-label-caps text-label-caps font-bold tracking-wider uppercase">ASTRA</span>
           </div>
           
           <div className="bg-[#111111]/60 backdrop-blur-xl border border-border-subtle w-full max-w-[440px] rounded-[24px] p-8 md:p-10 flex flex-col gap-stack-lg shadow-2xl relative overflow-hidden group">
@@ -122,7 +122,7 @@ export default function Login() {
                     type="text" 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="operator@sentinelx.net" 
+                    placeholder="operator@astra.net" 
                     className="bg-[#111111] border border-border-subtle w-full h-12 rounded-lg pl-10 pr-4 font-body-md text-body-md text-primary placeholder-on-surface-variant focus:border-white focus:shadow-[0_0_15px_rgba(255,255,255,0.1)] focus:outline-none transition-all" 
                     required
                   />

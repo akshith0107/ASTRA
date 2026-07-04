@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { fetchAPI } from '../lib/api';
-import { useNavigate } from 'react-router-dom';
 
 interface User {
   id: number;
@@ -12,7 +11,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string) => Promise<void>;
+  refreshToken: string | null;
+  login: (accessToken: string, refreshToken?: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -22,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
+  const [refreshToken, setRefreshToken] = useState<string | null>(localStorage.getItem('refresh_token'));
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -42,19 +43,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadUser();
   }, [token]);
 
-  const login = async (newToken: string) => {
-    localStorage.setItem('access_token', newToken);
-    setToken(newToken);
+  const login = async (newAccessToken: string, newRefreshToken?: string) => {
+    localStorage.setItem('access_token', newAccessToken);
+    setToken(newAccessToken);
+    if (newRefreshToken) {
+      localStorage.setItem('refresh_token', newRefreshToken);
+      setRefreshToken(newRefreshToken);
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    setToken(null);
-    setUser(null);
+  const logout = async () => {
+    try {
+      if (token || refreshToken) {
+        await fetchAPI('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refreshToken })
+        }).catch(() => {});
+      }
+    } finally {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setToken(null);
+      setRefreshToken(null);
+      setUser(null);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, refreshToken, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

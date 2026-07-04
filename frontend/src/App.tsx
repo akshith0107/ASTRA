@@ -20,7 +20,7 @@ function Sidebar() {
           <ShieldAlert className="text-white w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-lg font-bold tracking-wide text-white">SENTINEL<span className="text-error">X</span></h1>
+          <h1 className="text-lg font-bold tracking-wide text-white">ASTR<span className="text-error">A</span></h1>
           <p className="text-[10px] font-mono text-secondary tracking-widest uppercase">Scam Intelligence</p>
         </div>
       </div>
