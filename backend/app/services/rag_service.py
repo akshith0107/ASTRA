@@ -26,10 +26,10 @@ class RagService:
             rag_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'rag'))
             sys.path.append(rag_dir)
             
-            from app.rag.pipeline import SentinelXIndex
+            from app.rag.pipeline import ASTRAIndex
             
             # The pipeline.py load() expects a Path object pointing to the directory containing index.pkl
-            self.index = SentinelXIndex.load(Path(rag_dir))
+            self.index = ASTRAIndex.load(Path(rag_dir))
             self.is_loaded = True
             logger.info("RAG Pipeline loaded successfully.")
             

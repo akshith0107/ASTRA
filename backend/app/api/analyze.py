@@ -105,6 +105,7 @@ async def analyze_text(
         
         risk_score, risk_level = risk_engine.calculate_risk(
             base_confidence=confidence if scam_type != "Legitimate" else 0.0,
+            lstm_risk_score=lstm_risk_score,
             indicators=indicators,
             similar_scam_score=similarity_score
         )

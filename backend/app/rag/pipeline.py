@@ -1,5 +1,5 @@
 """
-SentinelX RAG Pipeline (Offline — TF-IDF + Cosine Similarity)
+ASTRA RAG Pipeline (Offline — TF-IDF + Cosine Similarity)
 ==============================================================
 Fully offline. No HuggingFace/internet needed.
 Char n-gram TF-IDF handles Hinglish + Tenglish + English naturally.
@@ -89,7 +89,7 @@ def load_all_documents():
     docs = []
     for fname, loader in [
         ("scam_detection_dataset.csv",  load_conversation_csv),
-        ("SentinelX_RAG_Documents.csv", load_rag_documents),
+        ("ASTRA_RAG_Documents.csv", load_rag_documents),
     ]:
         path = DATA_DIR / fname
         if path.exists():
@@ -103,7 +103,7 @@ def load_all_documents():
 # INDEX
 # ─────────────────────────────────────────────────────────────
 
-class SentinelXIndex:
+class ASTRAIndex:
     def __init__(self):
         # Char n-grams: language-agnostic, great for code-switching
         self.vectorizer = TfidfVectorizer(
@@ -157,7 +157,7 @@ class SentinelXIndex:
 # SCORING
 # ─────────────────────────────────────────────────────────────
 
-def score_risk(index: SentinelXIndex, query: str, k: int = 15) -> dict:
+def score_risk(index: ASTRAIndex, query: str, k: int = 15) -> dict:
     """
     Retrieve top-k similar docs, weight by class balance,
     return 0-1 risk score + verdict + matched category.
@@ -190,7 +190,7 @@ def score_risk(index: SentinelXIndex, query: str, k: int = 15) -> dict:
     }
 
 
-def retrieve(index: SentinelXIndex, query: str, k: int = 5) -> list:
+def retrieve(index: ASTRAIndex, query: str, k: int = 5) -> list:
     return [
         {
             "similarity": round(sim, 4),
@@ -216,8 +216,8 @@ def start_server():
         print("Run: pip install fastapi uvicorn")
         return
 
-    app   = FastAPI(title="SentinelX RAG API", version="1.0")
-    index = SentinelXIndex.load(INDEX_DIR)
+    app   = FastAPI(title="ASTRA RAG API", version="1.0")
+    index = ASTRAIndex.load(INDEX_DIR)
 
     class TextRequest(BaseModel):
         text: str
@@ -243,7 +243,7 @@ def start_server():
             "top_matches":   retrieve(index, req.text, req.k),
         }
 
-    print("\n[SERVER] SentinelX RAG API → http://localhost:8000")
+    print("\n[SERVER] ASTRA RAG API → http://localhost:8000")
     print("  Swagger docs  → http://localhost:8000/docs\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -253,7 +253,7 @@ def start_server():
 # ─────────────────────────────────────────────────────────────
 
 def main():
-    p = argparse.ArgumentParser(description="SentinelX RAG Pipeline")
+    p = argparse.ArgumentParser(description="ASTRA RAG Pipeline")
     p.add_argument("--build", action="store_true", help="Build index from CSV data")
     p.add_argument("--query", type=str,            help="Retrieve similar docs")
     p.add_argument("--score", type=str,            help="Score risk of a text")
@@ -266,13 +266,13 @@ def main():
         docs = load_all_documents()
         print(f"    Total : {len(docs)} documents")
         print("[2] Building index...")
-        idx = SentinelXIndex()
+        idx = ASTRAIndex()
         idx.build(docs)
         idx.save(INDEX_DIR)
         print("[✓] Done!")
 
     elif args.query:
-        idx     = SentinelXIndex.load(INDEX_DIR)
+        idx     = ASTRAIndex.load(INDEX_DIR)
         results = retrieve(idx, args.query, args.k)
         print(f"\nQuery: {args.query}\n")
         for i, r in enumerate(results, 1):
@@ -280,7 +280,7 @@ def main():
             print(f"    {r['text'][:200]}\n")
 
     elif args.score:
-        idx = SentinelXIndex.load(INDEX_DIR)
+        idx = ASTRAIndex.load(INDEX_DIR)
         r   = score_risk(idx, args.score)
         print(f"\nText     : {args.score}")
         print(f"Risk     : {r['risk_score']}")

@@ -26,13 +26,24 @@ class ReportRepository:
 
     @staticmethod
     def create(db: Session, text_content: str, risk_score: float, risk_level: str, scam_type: str, confidence: float, indicators: list) -> Report:
+        from app.database.models.reports import Indicator
+        
+        # Convert indicator dicts to SQLAlchemy models
+        indicator_models = [
+            Indicator(
+                indicator_name=ind.get("type", "Unknown"),
+                severity="HIGH" if risk_level in ["HIGH_RISK", "CRITICAL"] else "MEDIUM"
+            )
+            for ind in indicators
+        ]
+        
         db_report = Report(
-            text_content=text_content,
+            transcript=text_content,
             risk_score=risk_score,
             risk_level=risk_level,
             scam_type=scam_type,
             confidence=confidence,
-            indicators=indicators
+            indicators=indicator_models
         )
         db.add(db_report)
         db.flush()

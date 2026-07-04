@@ -28,10 +28,10 @@ class WhisperService:
         """
         logger.info(f"Loading Whisper model '{settings.WHISPER_MODEL}'...")
         try:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.model = whisper.load_model(settings.WHISPER_MODEL, device=device)
+            from app.core.device import DEVICE
+            self.model = whisper.load_model(settings.WHISPER_MODEL, device=str(DEVICE))
             self.is_loaded = True
-            logger.info(f"Whisper model '{settings.WHISPER_MODEL}' loaded successfully on {device}.")
+            logger.info(f"Whisper model '{settings.WHISPER_MODEL}' loaded successfully on {DEVICE}.")
         except Exception as e:
             logger.error(f"Failed to load Whisper model: {e}")
             self.is_loaded = False

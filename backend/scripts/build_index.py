@@ -81,7 +81,7 @@ def build_index():
         if rag_dir not in sys.path:
             sys.path.append(rag_dir)
             
-        from app.rag.pipeline import Document, SentinelXIndex
+        from app.rag.pipeline import Document, ASTRAIndex
         from pathlib import Path
         
         # Convert raw dicts to Document objects
@@ -101,7 +101,7 @@ def build_index():
         logger.info(f"Converted {len(docs)} raw entries into Document objects.")
         
         # Build Index
-        index = SentinelXIndex()
+        index = ASTRAIndex()
         index.build(docs)
         
         # Save Index

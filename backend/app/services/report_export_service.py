@@ -16,7 +16,7 @@ class ReportExportService:
             
             # Header
             pdf.set_font("helvetica", "B", 16)
-            pdf.cell(0, 10, "SentinelX - Threat Intelligence Report", ln=True, align="C")
+            pdf.cell(0, 10, "ASTRA - Threat Intelligence Report", ln=True, align="C")
             pdf.ln(10)
             
             # Report Meta

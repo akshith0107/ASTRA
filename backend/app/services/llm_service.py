@@ -35,7 +35,7 @@ class LLMService:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are SentinelX, a senior cybersecurity threat analyst."},
+                    {"role": "system", "content": "You are ASTRA, a senior cybersecurity threat analyst."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=150
@@ -58,7 +58,7 @@ class LLMService:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are SentinelX, a senior cybersecurity threat analyst."},
+                    {"role": "system", "content": "You are ASTRA, a senior cybersecurity threat analyst."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=250

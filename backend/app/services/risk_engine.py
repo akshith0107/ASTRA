@@ -1,32 +1,35 @@
 class RiskEngine:
     @staticmethod
-    def calculate_risk(base_confidence: float, indicators: list, similar_scam_score: float = 0.0) -> tuple[float, str]:
+    def calculate_risk(base_confidence: float, lstm_risk_score: float, indicators: list, similar_scam_score: float = 0.0) -> tuple[float, str]:
         """
         Calculates the final risk score (0-1.0) and risk level.
-        Combines BERT base confidence, indicator heuristics, and RAG similarity.
+        Combines BERT base confidence (30%), BiLSTM risk score (20%), indicator heuristics (30%), and RAG similarity (20%).
         """
-        # Base weight from ML model
-        score = base_confidence * 0.4
+        # BERT semantic classification weight (30%)
+        score = base_confidence * 0.3
         
-        # Indicator weights
+        # BiLSTM sequential risk weight (20%)
+        score += lstm_risk_score * 0.2
+        
+        # Indicator weights (30% max)
         indicator_weight = 0.0
         for ind in indicators:
             if ind.type == "Urgency/Threat":
-                indicator_weight += 0.2
+                indicator_weight += 0.15
             elif ind.type == "Financial Request":
-                indicator_weight += 0.25
+                indicator_weight += 0.20
             elif ind.type == "Authority Impersonation":
-                indicator_weight += 0.3
+                indicator_weight += 0.25
             elif ind.type == "Suspicious URL":
-                indicator_weight += 0.2
+                indicator_weight += 0.15
             else:
-                indicator_weight += 0.1
+                indicator_weight += 0.08
                 
-        # Cap indicator influence
-        indicator_weight = min(indicator_weight, 0.4)
+        # Cap indicator influence at 0.3
+        indicator_weight = min(indicator_weight, 0.3)
         score += indicator_weight
         
-        # RAG Historical match weight
+        # RAG Historical match weight (20% max)
         if similar_scam_score > 0.0:
             rag_weight = min(similar_scam_score * 0.2, 0.2)
             score += rag_weight

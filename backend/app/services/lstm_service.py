@@ -54,7 +54,6 @@ class LstmService:
             risk_level = self.map_risk_level(scam_prob)
             
             logger.info(f"BiLSTM Inference complete: score={scam_prob:.3f} level={risk_level}")
-            
             return float(scam_prob), risk_level, float(confidence)
             
         except Exception as e:

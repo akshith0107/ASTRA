@@ -6,6 +6,7 @@ from app.database.models.alerts import Alert
 from app.database.models.network import NetworkNode, NetworkEdge
 from app.database.models.threat_events import ThreatEvent
 from app.database.models.audit_logs import AuditLog
+from app.database.models.refresh_tokens import RefreshToken
 
 # This allows Alembic and other modules to just import from app.database.models
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "NetworkNode", 
     "NetworkEdge",
     "ThreatEvent",
-    "AuditLog"
+    "AuditLog",
+    "RefreshToken"
 ]

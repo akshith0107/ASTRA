@@ -1,5 +1,5 @@
 """
-SentinelX Realtime Call Analyzer
+ASTRA Realtime Call Analyzer
 =================================
 Processes a call turn-by-turn, showing escalating risk live.
 
@@ -10,15 +10,15 @@ Usage:
 import warnings
 warnings.filterwarnings("ignore")
 
-from pipeline import SentinelXIndex, score_risk, INDEX_DIR
+from pipeline import ASTRAIndex, score_risk, INDEX_DIR
 
 def analyze_call(turns: list[str], verbose=True) -> list[dict]:
-    index = SentinelXIndex.load(INDEX_DIR)
+    index = ASTRAIndex.load(INDEX_DIR)
     results, cumulative = [], ""
 
     if verbose:
         print("=" * 62)
-        print("  SentinelX — Live Call Risk Analyzer")
+        print("  ASTRA — Live Call Risk Analyzer")
         print("=" * 62)
         print()
 

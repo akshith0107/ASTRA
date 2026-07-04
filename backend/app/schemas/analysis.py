@@ -1,8 +1,21 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
+from pydantic import model_validator
+
 class AnalyzeTextRequest(BaseModel):
-    text: str = Field(..., description="The text content to analyze for scam patterns")
+    text: Optional[str] = Field(None, description="The text content to analyze for scam patterns")
+    text_content: Optional[str] = Field(None, description="The text content to analyze (legacy/frontend payload)")
+
+    @model_validator(mode='after')
+    def normalize_text(self) -> 'AnalyzeTextRequest':
+        if not self.text and not self.text_content:
+            raise ValueError('Either text or text_content must be provided')
+        if not self.text and self.text_content:
+            self.text = self.text_content
+        if not self.text_content and self.text:
+            self.text_content = self.text
+        return self
 
 class Indicator(BaseModel):
     type: str

@@ -53,6 +53,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
     try:
         whisper_service = websocket.app.state.whisper_service
         bert_service = websocket.app.state.bert_service
+        rag_service = websocket.app.state.rag_service
+        lstm_service = websocket.app.state.lstm_service
         
         while True:
             # Receive audio frame (binary)
@@ -68,22 +70,44 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
                 # Step 3: Extract Indicators
                 indicators = indicator_service.extract_indicators(transcript)
                 
-                # Step 4: Calculate Risk Score
+                # Step 4: RAG Retrieval
+                top_docs = rag_service.retrieve_with_metadata(transcript, top_k=1)
+                campaign_name, similarity_score, rag_scam_type = None, 0.0, None
+                if top_docs:
+                    best_match = top_docs[0]
+                    campaign_name = best_match.get("campaign")
+                    similarity_score = best_match.get("similarity", 0.0)
+                    rag_scam_type = best_match.get("category")
+                
+                # Step 5: LSTM Risk
+                lstm_risk_score, lstm_risk_level, lstm_confidence = lstm_service.predict_risk(transcript)
+                
+                # Step 6: Calculate Risk Score
                 risk_score, risk_level = risk_engine.calculate_risk(
                     base_confidence=confidence if scam_type != "Legitimate" else 0.0,
-                    indicators=indicators
+                    lstm_risk_score=lstm_risk_score,
+                    indicators=indicators,
+                    similar_scam_score=similarity_score
                 )
+                
+                final_scam_type = scam_type
+                if similarity_score > 0.85 and rag_scam_type:
+                    final_scam_type = rag_scam_type
                 
                 # Format payload for frontend
                 payload = {
                     "transcript": transcript,
                     "risk_score": risk_score,
                     "risk_level": risk_level,
-                    "scam_type": scam_type,
-                    "indicators": [ind.model_dump() for ind in indicators]
+                    "scam_type": final_scam_type,
+                    "indicators": [ind.model_dump() for ind in indicators],
+                    "lstm_risk_score": lstm_risk_score,
+                    "lstm_risk_level": lstm_risk_level,
+                    "lstm_confidence": lstm_confidence,
+                    "similar_scams": [{"campaign_name": campaign_name, "similarity_score": similarity_score, "scam_type": rag_scam_type}] if campaign_name else []
                 }
                 
-                # Step 5: Push Updates
+                # Step 7: Push Updates
                 await manager.send_personal_message(json.dumps(payload), websocket)
 
     except WebSocketDisconnect:

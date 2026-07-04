@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 
 class BiLSTMPredictor:
     def __init__(self, model_dir: str):
+        from app.core.device import DEVICE
         self.model_dir = model_dir
-        self.device = torch.device("cpu") # Keep inference lightweight on CPU
+        self.device = DEVICE
         self.model = None
         self.vocab = None
         
@@ -29,6 +30,8 @@ class BiLSTMPredictor:
             with open(vocab_path, "rb") as f:
                 self.vocab = pickle.load(f)
                 
+            self.vocab_size = len(self.vocab)
+                
             # 2. Load Model
             model_path = os.path.join(self.model_dir, "bilstm_model.pth")
             if not os.path.exists(model_path):
@@ -40,9 +43,11 @@ class BiLSTMPredictor:
                 hidden_dim=self.hidden_dim
             )
             
-            # Use weights_only=True for security if using modern PyTorch, 
-            # but standard load is safer for older cross-compat if needed.
-            state_dict = torch.load(model_path, map_location=self.device)
+            from app.core.device import safe_torch_load
+            with safe_torch_load():
+                # Use weights_only=True for security if using modern PyTorch, 
+                # but standard load is safer for older cross-compat if needed.
+                state_dict = torch.load(model_path, map_location=self.device)
             self.model.load_state_dict(state_dict)
             
             # CRITICAL: Evaluation mode + remove gradients
@@ -77,6 +82,10 @@ class BiLSTMPredictor:
         # If empty (e.g. all punctuation stripped out, though split() is robust)
         if len(indices) == 0:
             indices = [unk_idx]
+            
+        # Pad with 0 (<PAD>) at the end (post-padding) to match training pipeline
+        if len(indices) < self.max_length:
+            indices = indices + [0] * (self.max_length - len(indices))
             
         return torch.tensor([indices], dtype=torch.long, device=self.device)
 
