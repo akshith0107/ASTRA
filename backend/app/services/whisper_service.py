@@ -1,8 +1,7 @@
 import logging
 import tempfile
 import os
-import whisper
-import torch
+from faster_whisper import WhisperModel
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -24,14 +23,23 @@ class WhisperService:
     def load_model(self):
         """
         Loads the whisper model only once during startup (Singleton).
-        Optimized for CPU if CUDA is not available.
+        Optimized for CPU via CTranslate2's int8 quantization.
         """
-        logger.info(f"Loading Whisper model '{settings.WHISPER_MODEL}'...")
         try:
             from app.core.device import DEVICE
-            self.model = whisper.load_model(settings.WHISPER_MODEL, device=str(DEVICE))
+            
+            device_str = "cuda" if str(DEVICE) == "cuda" else "cpu"
+            # Use 8-bit integer quantization on CPU to speed up inference and save RAM on Render
+            compute_type = "int8" if device_str == "cpu" else "float16"
+            
+            logger.info(f"Loading faster-whisper model '{settings.WHISPER_MODEL}' on {device_str} ({compute_type})...")
+            self.model = WhisperModel(
+                settings.WHISPER_MODEL,
+                device=device_str,
+                compute_type=compute_type
+            )
             self.is_loaded = True
-            logger.info(f"Whisper model '{settings.WHISPER_MODEL}' loaded successfully on {DEVICE}.")
+            logger.info(f"Whisper model '{settings.WHISPER_MODEL}' loaded successfully on {device_str}.")
         except Exception as e:
             logger.error(f"Failed to load Whisper model: {e}")
             self.is_loaded = False
@@ -63,10 +71,13 @@ class WhisperService:
         try:
             # CPU optimized inference offloaded to background thread
             def sync_transcribe():
-                return self.model.transcribe(temp_path, fp16=False)
+                segments, info = self.model.transcribe(temp_path, beam_size=5)
+                # Consume the generator to retrieve transcription text
+                text = "".join([segment.text for segment in segments])
+                return text.strip()
                 
             result = await asyncio.to_thread(sync_transcribe)
-            return result.get("text", "").strip()
+            return result
         except Exception as e:
             logger.error(f"Transcription error: {e}")
             return ""
@@ -78,21 +89,19 @@ class WhisperService:
         """
         Detects the language of the audio by reading the first 30 seconds.
         """
+        import asyncio
+        
         if not audio_data or not self.is_loaded or self.model is None:
             return "unknown"
             
         temp_path = self._save_temp_audio(audio_data)
         try:
-            # load audio and pad/trim it to fit 30 seconds
-            audio = whisper.load_audio(temp_path)
-            audio = whisper.pad_or_trim(audio)
-
-            # make log-Mel spectrogram and move to the same device as the model
-            mel = whisper.log_mel_spectrogram(audio, n_mels=self.model.dims.n_mels).to(self.model.device)
-
-            # detect the spoken language
-            _, probs = self.model.detect_language(mel)
-            detected_lang = max(probs, key=probs.get)
+            def sync_detect():
+                # info is returned instantly before segments are consumed
+                _, info = self.model.transcribe(temp_path)
+                return info.language
+                
+            detected_lang = await asyncio.to_thread(sync_detect)
             return detected_lang
         except Exception as e:
             logger.error(f"Language detection error: {e}")
@@ -105,8 +114,6 @@ class WhisperService:
         """
         Optimized method for transcribing live monitor audio chunks.
         """
-        # For live monitoring chunks, we treat them the same as full transcriptions
-        # but in a production env we might use a sliding window.
         return await self.transcribe(audio_data)
 
 whisper_service = WhisperService()
