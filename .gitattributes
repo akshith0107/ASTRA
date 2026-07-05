@@ -1,0 +1,4 @@
+runtime.txt text eol=lf
+backend/runtime.txt text eol=lf
+backend/requirements.txt text eol=lf
+render.yaml text eol=lf
