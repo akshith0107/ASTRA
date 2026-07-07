@@ -25,5 +25,6 @@ Thumbs.db
 
 # Models & Scratch
 backend/app/models/minilm/model.safetensors
+backend/app/models/minilm/model_int8.onnx
 backend/app/models/minilm/training_args.bin
 backend/scratch/

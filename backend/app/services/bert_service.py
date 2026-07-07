@@ -1,19 +1,20 @@
 import logging
 import pickle
-import torch
+import os
+import numpy as np
+import onnxruntime as ort
 from typing import Tuple
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
+from transformers import AutoTokenizer
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class BertService:
     def __init__(self):
-        self.model = None
+        self.session = None
         self.label_encoder = None
         self.tokenizer = None
-        # Support multiple device types, but for INT8 quantized model, CPU is required.
-        self.device = torch.device("cpu")
+        self.is_loaded = False
 
     def load_model(self):
         try:
@@ -24,58 +25,66 @@ class BertService:
             with open(settings.LABEL_ENCODER_PATH, "rb") as f:
                 self.label_encoder = pickle.load(f)
 
-            logger.info(f"Loading MiniLM model from {settings.BERT_MODEL_DIR}...")
-            model_unquantized = AutoModelForSequenceClassification.from_pretrained(settings.BERT_MODEL_DIR)
+            # Use the high-accuracy fine-tuned ONNX quantized model
+            onnx_path = os.path.join(settings.BERT_MODEL_DIR, "model_int8.onnx")
+            logger.info(f"Loading MiniLM ONNX model from {onnx_path}...")
             
-            # Dynamic quantization matching original PyTorch format
-            self.model = torch.quantization.quantize_dynamic(
-                model_unquantized, {torch.nn.Linear}, dtype=torch.qint8
-            )
-            
-            self.model.to(self.device)
-            self.model.eval()
-            
-            logger.info("MiniLM INT8 model loaded successfully.")
+            # CPU Execution Provider is standard and safe for Render
+            self.session = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
+            self.is_loaded = True
+            logger.info("MiniLM ONNX model loaded successfully.")
         except Exception as e:
-            logger.error(f"Failed to load MiniLM model: {e}")
+            logger.error(f"Failed to load MiniLM ONNX model: {e}")
+            self.is_loaded = False
 
     async def classify(self, text: str) -> Tuple[str, float]:
         """
-        Classifies the text to determine the scam type and confidence.
+        Classifies the text to determine the scam type and confidence using ONNX model.
         Includes graceful degradation fallback.
         """
-        if not self.model or not self.tokenizer or not self.label_encoder:
+        if not self.is_loaded or not self.session or not self.tokenizer or not self.label_encoder:
             logger.warning("MiniLM Service is offline. Engaging Fallback Rule Engine.")
             return self._fallback_classify(text)
 
         try:
+            # Tokenizer must pad/truncate to exactly 128 as expected by the ONNX model input dimensions
             inputs = self.tokenizer(
                 text, 
-                return_tensors="pt", 
+                return_tensors="np", 
+                padding="max_length", 
                 truncation=True, 
                 max_length=128
-            ).to(self.device)
+            )
             
-            with torch.no_grad():
-                outputs = self.model(**inputs)
+            ort_inputs = {}
+            for inp in self.session.get_inputs():
+                if inp.name in inputs:
+                    ort_inputs[inp.name] = inputs[inp.name].astype(np.int64)
+            
+            # Run inference in a background thread to prevent event loop blocking
+            import asyncio
+            def sync_inference():
+                return self.session.run(None, ort_inputs)
                 
-            logits = outputs.logits
-            probs = torch.softmax(logits, dim=1)
-            confidence, predicted_class = torch.max(probs, dim=1)
+            outputs = await asyncio.to_thread(sync_inference)
+            logits = outputs[0][0]
             
-            scam_type = self.label_encoder.inverse_transform([predicted_class.item()])[0]
+            # Calculate probabilities via softmax
+            exp_logits = np.exp(logits - np.max(logits))
+            probs = exp_logits / np.sum(exp_logits)
             
-            # Formatting the output to match system expectations
+            predicted_class = np.argmax(logits)
+            confidence = probs[predicted_class]
+            
+            scam_type = self.label_encoder.inverse_transform([predicted_class])[0]
+            
+            # Formatting output
             if scam_type.lower() == "normal":
                 scam_type = "Legitimate"
-                # If legitimate, we return a low confidence so it doesn't trigger the risk engine
-                # or we return high confidence of being legitimate. 
-                # The risk engine expects confidence of it being a scam.
-                # Actually, the original code returned "Legitimate" with 0.0 confidence.
-            elif scam_type.lower() == "fraud":
-                scam_type = "Unknown Threat" # or some general fraud mapping, we can use "Scam/Fraud"
+                # If legitimate, we return a low confidence of being a scam so it doesn't trigger the risk engine
+                return scam_type, 0.0
             
-            return scam_type, confidence.item()
+            return scam_type, float(confidence)
             
         except Exception as e:
             logger.error(f"MiniLM Inference Failed. Engaging Fallback Rule Engine. Error: {e}")
